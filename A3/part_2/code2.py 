@@ -1,0 +1,347 @@
+#!/usr/bin/env python3
+"""
+Part 2: Attention-Based Retrieval (Lost-in-the-Middle)
+
+This module contains the core functions for attention-based tool retrieval.
+Uses the model's internal attention to score and rank tools.
+"""
+
+import json
+import numpy as np
+import torch
+from typing import List, Dict, Tuple, Optional
+from pathlib import Path
+from tqdm import tqdm
+import matplotlib.pyplot as plt
+
+
+# =============================================================================
+# Prompt Utilities (from template)
+# =============================================================================
+
+class PromptUtils:
+    """Utility class to construct prompts with tools and queries."""
+    
+    def __init__(self, tools: List[Dict]):
+        self.tools = tools
+    
+    def construct_prompt(self, query: str, tool_order: Optional[List[int]] = None) -> str:
+        """
+        Construct a prompt with all tools followed by the query.
+        
+        Args:
+            query: The query string
+            tool_order: Optional ordering of tools (for position experiments)
+        
+        Returns:
+            Full prompt string
+        """
+        if tool_order is None:
+            tool_order = list(range(len(self.tools)))
+        
+        prompt_parts = []
+        prompt_parts.append("Below is a list of available tools:\n\n")
+        
+        for i, idx in enumerate(tool_order):
+            tool = self.tools[idx]
+            prompt_parts.append(f"Tool {i+1}: {tool['name']}\n")
+            prompt_parts.append(f"Description: {tool['description']}\n\n")
+        
+        prompt_parts.append(f"Query: {query}\n")
+        prompt_parts.append("Which tool should be used for this query?")
+        
+        return "".join(prompt_parts)
+    
+    def get_doc_spans(
+        self, 
+        tokenizer, 
+        prompt: str, 
+        tool_order: Optional[List[int]] = None
+    ) -> List[Tuple[int, int, int]]:
+        """
+        Get the token spans for each tool in the prompt.
+        
+        Args:
+            tokenizer: The tokenizer
+            prompt: The full prompt
+            tool_order: Tool ordering used in the prompt
+        
+        Returns:
+            List of (tool_idx, start_token, end_token) tuples
+        """
+        if tool_order is None:
+            tool_order = list(range(len(self.tools)))
+        
+        doc_spans = []
+        
+        # Tokenize full prompt
+        full_tokens = tokenizer.encode(prompt, add_special_tokens=False)
+        
+        # Find each tool's span
+        current_pos = 0
+        prefix = "Below is a list of available tools:\n\n"
+        prefix_tokens = tokenizer.encode(prefix, add_special_tokens=False)
+        current_pos = len(prefix_tokens)
+        
+        for i, idx in enumerate(tool_order):
+            tool = self.tools[idx]
+            tool_text = f"Tool {i+1}: {tool['name']}\nDescription: {tool['description']}\n\n"
+            tool_tokens = tokenizer.encode(tool_text, add_special_tokens=False)
+            
+            start_pos = current_pos
+            end_pos = current_pos + len(tool_tokens)
+            
+            doc_spans.append((idx, start_pos, end_pos))
+            current_pos = end_pos
+        
+        return doc_spans
+
+
+# =============================================================================
+# TODO: Complete these functions
+# =============================================================================
+
+def get_query_span(
+    tokenizer,
+    prompt: str,
+    input_ids: torch.Tensor
+) -> Tuple[int, int]:
+    """
+    Identify the token span corresponding to the query in the prompt.
+    
+    Args:
+        tokenizer: The tokenizer used
+        prompt: The full prompt string
+        input_ids: Token IDs of the prompt (shape: [1, seq_len])
+    
+    Returns:
+        (start_idx, end_idx): Token indices for the query span
+    
+    TODO: Implement this function
+    """
+    # The query appears after "Query: " and before "\nWhich tool"
+    # Find the position of "Query: " in the prompt
+    
+    query_marker = "Query: "
+    end_marker = "\nWhich tool should be used for this query?"
+    
+    # Find query text
+    query_start_char = prompt.find(query_marker)
+    query_end_char = prompt.find(end_marker)
+    
+    if query_start_char == -1 or query_end_char == -1:
+        raise ValueError("Could not find query markers in prompt")
+    
+    # Get the text before and including the query
+    text_before_query = prompt[:query_start_char + len(query_marker)]
+    text_including_query = prompt[:query_end_char]
+    
+    # Tokenize to find positions
+    tokens_before = tokenizer.encode(text_before_query, add_special_tokens=False)
+    tokens_including = tokenizer.encode(text_including_query, add_special_tokens=False)
+    
+    # Query span
+    start_idx = len(tokens_before)
+    end_idx = len(tokens_including)
+    
+    return (start_idx, end_idx)
+
+
+def query_to_docs_attention(
+    attentions: Tuple[torch.Tensor, ...],
+    query_span: Tuple[int, int],
+    doc_spans: List[Tuple[int, int, int]],
+    aggregation: str = "mean"
+) -> Dict[int, float]:
+    """
+    Compute attention-based scores for each tool.
+    
+    Scores are computed based on how much attention flows from 
+    query tokens to each tool's tokens.
+    
+    Args:
+        attentions: Tuple of attention tensors from the model
+                   Each tensor shape: [batch, num_heads, seq_len, seq_len]
+        query_span: (start, end) token indices for the query
+        doc_spans: List of (tool_idx, start, end) for each tool
+        aggregation: How to aggregate attention ("mean", "max", "sum")
+    
+    Returns:
+        Dictionary mapping tool_idx to attention score
+    
+    TODO: Implement this function
+    """
+    query_start, query_end = query_span
+    
+    # Stack all attention layers: [num_layers, batch, heads, seq, seq]
+    all_attention = torch.stack(attentions)
+    
+    # Average across layers and heads: [batch, seq, seq] -> [seq, seq]
+    # Shape: [num_layers, 1, num_heads, seq_len, seq_len]
+    avg_attention = all_attention.mean(dim=(0, 1, 2))  # [seq_len, seq_len]
+    
+    # Extract attention FROM query tokens TO all other tokens
+    # query_attention shape: [query_len, seq_len]
+    query_attention = avg_attention[query_start:query_end, :]
+    
+    # Aggregate across query tokens
+    if aggregation == "mean":
+        query_attention_agg = query_attention.mean(dim=0)  # [seq_len]
+    elif aggregation == "max":
+        query_attention_agg = query_attention.max(dim=0)[0]
+    elif aggregation == "sum":
+        query_attention_agg = query_attention.sum(dim=0)
+    else:
+        query_attention_agg = query_attention.mean(dim=0)
+    
+    # Compute score for each tool
+    tool_scores = {}
+    for tool_idx, doc_start, doc_end in doc_spans:
+        # Sum/mean attention to this tool's tokens
+        tool_attention = query_attention_agg[doc_start:doc_end]
+        score = tool_attention.sum().item()  # Total attention to this tool
+        tool_scores[tool_idx] = score
+    
+    return tool_scores
+
+
+def attention_based_ranking(
+    tool_scores: Dict[int, float]
+) -> List[int]:
+    """
+    Rank tools based on attention scores.
+    
+    Args:
+        tool_scores: Dictionary mapping tool_idx to score
+    
+    Returns:
+        List of tool indices ranked by score (descending)
+    """
+    # Sort by score in descending order
+    sorted_tools = sorted(tool_scores.items(), key=lambda x: x[1], reverse=True)
+    return [tool_idx for tool_idx, score in sorted_tools]
+
+
+def analyze_gold_attention(
+    results: List[Dict],
+    output_path: str = "plot2/gold_attention_plot.png"
+) -> None:
+    """
+    Analyze and plot how attention to the correct tool varies with position.
+    
+    This reveals the "lost-in-the-middle" phenomenon.
+    
+    Args:
+        results: List of dictionaries containing:
+                 - 'gold_position': Position of correct tool in prompt
+                 - 'gold_attention': Attention score for correct tool
+                 - 'gold_rank': Rank of correct tool
+        output_path: Path to save the plot
+    """
+    # Create output directory if needed
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    
+    # Extract data as numpy arrays
+    positions = np.array([r['gold_position'] for r in results])
+    attentions = np.array([r['gold_attention'] for r in results])
+    ranks = np.array([r['gold_rank'] for r in results])
+    
+    # Create bins for position analysis
+    num_bins = 10
+    max_pos = positions.max()
+    bin_edges = np.linspace(0, max_pos + 1, num_bins + 1)
+    
+    # Compute statistics per bin
+    bin_centers = []
+    bin_mean_attention = []
+    bin_std_attention = []
+    bin_mean_rank = []
+    bin_counts = []
+    
+    for i in range(num_bins):
+        mask = (positions >= bin_edges[i]) & (positions < bin_edges[i+1])
+        if mask.sum() > 0:
+            bin_centers.append((bin_edges[i] + bin_edges[i+1]) / 2)
+            bin_mean_attention.append(attentions[mask].mean())
+            bin_std_attention.append(attentions[mask].std())
+            bin_mean_rank.append(ranks[mask].mean())
+            bin_counts.append(mask.sum())
+    
+    # Create figure with 2x2 subplots
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    
+    # Plot 1: Scatter - Attention vs Position
+    ax1 = axes[0, 0]
+    ax1.scatter(positions, attentions, alpha=0.4, s=20, c='blue')
+    ax1.set_xlabel('Position of Gold Tool', fontsize=11)
+    ax1.set_ylabel('Attention Score', fontsize=11)
+    ax1.set_title('Attention vs Position (All Queries)', fontsize=12)
+    ax1.grid(True, alpha=0.3)
+    
+    # Plot 2: Binned Average with Error Bars
+    ax2 = axes[0, 1]
+    ax2.errorbar(bin_centers, bin_mean_attention, yerr=bin_std_attention, 
+                 fmt='o-', capsize=5, capthick=2, linewidth=2, markersize=8,
+                 color='darkblue', label='Mean ± Std')
+    ax2.set_xlabel('Position of Gold Tool (Binned)', fontsize=11)
+    ax2.set_ylabel('Average Attention Score', fontsize=11)
+    ax2.set_title('Position Effect on Attention (Lost-in-the-Middle)', fontsize=12)
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+    
+    # Plot 3: Rank vs Position
+    ax3 = axes[1, 0]
+    ax3.scatter(positions, ranks, alpha=0.4, s=20, c='green')
+    ax3.plot(bin_centers, bin_mean_rank, 'ro-', linewidth=2, markersize=8, label='Binned Mean')
+    ax3.set_xlabel('Position of Gold Tool', fontsize=11)
+    ax3.set_ylabel('Rank of Gold Tool', fontsize=11)
+    ax3.set_title('Rank vs Position', fontsize=12)
+    ax3.legend()
+    ax3.grid(True, alpha=0.3)
+    ax3.invert_yaxis()  # Lower rank is better
+    
+    # Plot 4: Distribution of positions
+    ax4 = axes[1, 1]
+    ax4.bar(bin_centers, bin_counts, width=(bin_edges[1]-bin_edges[0])*0.8, 
+            color='steelblue', edgecolor='black', alpha=0.7)
+    ax4.set_xlabel('Position Bin', fontsize=11)
+    ax4.set_ylabel('Number of Queries', fontsize=11)
+    ax4.set_title('Distribution of Gold Tool Positions', fontsize=12)
+    ax4.grid(True, alpha=0.3, axis='y')
+    
+    plt.suptitle('Lost-in-the-Middle Analysis', fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    print(f"Plot saved to {output_path}")
+    
+    # Print summary statistics
+    print("\n" + "="*60)
+    print("Position-Attention Statistics")
+    print("="*60)
+    print(f"{'Position Range':<18} {'Mean Attn':<14} {'Std':<12} {'Mean Rank':<12} {'Count':<8}")
+    print("-"*64)
+    for i in range(len(bin_centers)):
+        low, high = bin_edges[i], bin_edges[i+1]
+        print(f"{low:.0f}-{high:.0f}".ljust(18) + 
+              f"{bin_mean_attention[i]:<14.6f} {bin_std_attention[i]:<12.6f} "
+              f"{bin_mean_rank[i]:<12.2f} {bin_counts[i]:<8}")
+    
+    # Correlation analysis
+    print("-"*64)
+    print(f"Correlation (position vs attention): {np.corrcoef(positions, attentions)[0,1]:.4f}")
+    print(f"Correlation (position vs rank): {np.corrcoef(positions, ranks)[0,1]:.4f}")
+
+
+def compute_recall(
+    rankings: List[List[int]], 
+    gold_indices: List[int], 
+    k: int
+) -> float:
+    """Compute Recall@k."""
+    hits = 0
+    for ranking, gold_idx in zip(rankings, gold_indices):
+        if gold_idx in ranking[:k]:
+            hits += 1
+    return hits / len(gold_indices)

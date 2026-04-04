@@ -1,0 +1,225 @@
+#!/usr/bin/env python3
+"""
+Part 2: Attention-Based Retrieval Runner
+
+Runs the attention-based retrieval experiment and generates plots.
+"""
+
+import json
+import torch
+from pathlib import Path
+from tqdm import tqdm
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import random
+import numpy as np
+
+from code2 import (
+    PromptUtils,
+    get_query_span,
+    query_to_docs_attention,
+    attention_based_ranking,
+    analyze_gold_attention,
+    compute_recall
+)
+
+# Set seeds for reproducibility (DO NOT CHANGE)
+SEED = 42
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(SEED)
+
+# Model name (DO NOT CHANGE - check assignment repo for exact name)
+MODEL_NAME = "meta-llama/Llama-2-7b-hf"  # Update if different in repo
+
+
+def load_data(data_dir: str = "data"):
+    """Load tools and queries."""
+    data_path = Path(data_dir)
+    
+    with open(data_path / "tools.json", "r") as f:
+        tools = json.load(f)
+    
+    with open(data_path / "train_queries.json", "r") as f:
+        train_queries = json.load(f)
+    
+    with open(data_path / "test_queries.json", "r") as f:
+        test_queries = json.load(f)
+    
+    return tools, train_queries, test_queries
+
+
+def run_attention_retrieval(
+    model,
+    tokenizer,
+    prompt_utils: PromptUtils,
+    queries: list,
+    device: str,
+    max_length: int = 4096
+):
+    """
+    Run attention-based retrieval for all queries.
+    
+    Returns:
+        rankings: List of tool rankings for each query
+        gold_indices: List of correct tool indices
+        analysis_results: List of dicts for position analysis
+    """
+    rankings = []
+    gold_indices = []
+    analysis_results = []
+    
+    for query_data in tqdm(queries, desc="Processing queries"):
+        query_text = query_data["query"]
+        gold_tool = query_data["tool"]
+        
+        # Find gold index
+        if isinstance(gold_tool, int):
+            gold_idx = gold_tool
+        else:
+            # Find by name
+            for i, tool in enumerate(prompt_utils.tools):
+                if tool["name"] == gold_tool:
+                    gold_idx = i
+                    break
+        
+        gold_indices.append(gold_idx)
+        
+        # Create a random ordering of tools (to test position effects)
+        # For fair evaluation, we can either:
+        # 1. Use natural order (gold tool at its natural position)
+        # 2. Shuffle to randomize position
+        # Here we use natural order for consistency
+        tool_order = list(range(len(prompt_utils.tools)))
+        
+        # Find gold tool's position in this ordering
+        gold_position = tool_order.index(gold_idx)
+        
+        # Construct prompt
+        prompt = prompt_utils.construct_prompt(query_text, tool_order)
+        
+        # Tokenize
+        inputs = tokenizer(
+            prompt, 
+            return_tensors="pt", 
+            truncation=True, 
+            max_length=max_length
+        ).to(device)
+        
+        # Get doc spans
+        doc_spans = prompt_utils.get_doc_spans(tokenizer, prompt, tool_order)
+        
+        # Run model with attention output
+        with torch.no_grad():
+            outputs = model(
+                **inputs,
+                output_attentions=True,
+                return_dict=True
+            )
+        
+        attentions = outputs.attentions  # Tuple of attention tensors
+        
+        # Get query span
+        query_span = get_query_span(tokenizer, prompt, inputs.input_ids)
+        
+        # Compute attention-based scores
+        tool_scores = query_to_docs_attention(attentions, query_span, doc_spans)
+        
+        # Rank tools
+        ranking = attention_based_ranking(tool_scores)
+        rankings.append(ranking)
+        
+        # Get gold tool's attention and rank
+        gold_attention = tool_scores.get(gold_idx, 0.0)
+        gold_rank = ranking.index(gold_idx) + 1 if gold_idx in ranking else len(ranking)
+        
+        analysis_results.append({
+            'gold_position': gold_position,
+            'gold_attention': gold_attention,
+            'gold_rank': gold_rank,
+            'query': query_text
+        })
+        
+        # Clear GPU memory
+        del outputs, attentions
+        torch.cuda.empty_cache()
+    
+    return rankings, gold_indices, analysis_results
+
+
+def main():
+    print("=" * 60)
+    print("Part 2: Attention-Based Retrieval")
+    print("=" * 60)
+    
+    # Check device
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device}")
+    
+    # Load data
+    print("\nLoading data...")
+    tools, train_queries, test_queries = load_data()
+    print(f"Loaded {len(tools)} tools")
+    print(f"Loaded {len(test_queries)} test queries")
+    
+    # Initialize prompt utils
+    prompt_utils = PromptUtils(tools)
+    
+    # Load model and tokenizer
+    print(f"\nLoading model: {MODEL_NAME}")
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    
+    # Set pad token if not set
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    
+    model = AutoModelForCausalLM.from_pretrained(
+        MODEL_NAME,
+        torch_dtype=torch.float16,  # Use FP16 to save memory
+        device_map="auto",  # Automatic device placement
+        output_attentions=True
+    )
+    model.eval()
+    
+    # Run retrieval
+    print("\nRunning attention-based retrieval on test queries...")
+    rankings, gold_indices, analysis_results = run_attention_retrieval(
+        model, tokenizer, prompt_utils, test_queries, device
+    )
+    
+    # Compute metrics
+    recall_1 = compute_recall(rankings, gold_indices, k=1)
+    recall_5 = compute_recall(rankings, gold_indices, k=5)
+    
+    print("\n" + "=" * 60)
+    print("Part 2 Results")
+    print("=" * 60)
+    print(f"Recall@1: {recall_1:.4f}")
+    print(f"Recall@5: {recall_5:.4f}")
+    
+    # Save results
+    results = {
+        "Recall@1": recall_1,
+        "Recall@5": recall_5
+    }
+    
+    Path("results").mkdir(exist_ok=True)
+    with open("results/part2_results.json", "w") as f:
+        json.dump(results, f, indent=2)
+    
+    # Generate position analysis plot
+    print("\nGenerating position analysis plot...")
+    analyze_gold_attention(analysis_results, "plot2/gold_attention_plot.png")
+    
+    # Save detailed analysis
+    with open("results/part2_analysis.json", "w") as f:
+        json.dump(analysis_results, f, indent=2)
+    
+    print("\nResults saved to results/part2_results.json")
+    print("Analysis saved to results/part2_analysis.json")
+    print("Plot saved to plot2/gold_attention_plot.png")
+
+
+if __name__ == "__main__":
+    main()

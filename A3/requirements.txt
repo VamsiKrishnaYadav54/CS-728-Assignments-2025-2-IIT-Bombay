@@ -1,0 +1,21 @@
+# CS728 PA3 Requirements
+# Install on login node: pip install -r requirements.txt --user
+
+# Core ML libraries
+torch>=2.0.0
+transformers>=4.35.0
+sentence-transformers>=2.2.0
+
+# BM25 for sparse retrieval
+rank_bm25>=0.2.2
+
+# Utilities
+numpy>=1.24.0
+tqdm>=4.65.0
+matplotlib>=3.7.0
+
+# NLP
+nltk>=3.8.0
+
+# JSON handling (usually included with Python)
+# json is built-in
