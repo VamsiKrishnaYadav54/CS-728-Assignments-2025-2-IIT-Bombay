@@ -1,0 +1,36 @@
+==============================================
+Running Part 1: Classical Retrieval
+Job ID: 87406
+Model dir: /home/cccp/25m2125/VAMSI/CS728/CS-728-Assignments-2025-2-IIT-Bombay/A3/models/hf_cache
+Start time: Sun Apr  5 13:18:40 IST 2026
+==============================================
+Loading data...
+Test queries: 5000, Tools: 100
+
+==================================================
+Running BM25...
+BM25 - Recall@1: 0.1860, Recall@5: 0.3476
+
+==================================================
+Running msmarco-MiniLM...
+Loading model: sentence-transformers/msmarco-MiniLM-L-6-v3
+Encoding tool descriptions...
+msmarco-MiniLM - Recall@1: 0.3882, Recall@5: 0.6106
+
+==================================================
+Running UAE-Large-V1...
+Loading model: WhereIsAI/UAE-Large-V1
+Encoding tool descriptions...
+UAE-Large-V1 - Recall@1: 0.6158, Recall@5: 0.8690
+
+============================================================
+PART 1 RESULTS - Classical Retrieval
+============================================================
+Method               Recall@1        Recall@5       
+--------------------------------------------------
+BM25                 0.1860          0.3476
+msmarco-MiniLM       0.3882          0.6106
+UAE-Large-V1         0.6158          0.8690
+
+Results saved to results_part1.json
+Part 1 completed at: Sun Apr  5 13:49:22 IST 2026

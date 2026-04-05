@@ -1,0 +1,14 @@
+{
+  "BM25": {
+    "Recall@1": 0.186,
+    "Recall@5": 0.3476
+  },
+  "msmarco-MiniLM": {
+    "Recall@1": 0.3882,
+    "Recall@5": 0.6106
+  },
+  "UAE-Large-V1": {
+    "Recall@1": 0.6158,
+    "Recall@5": 0.869
+  }
+}

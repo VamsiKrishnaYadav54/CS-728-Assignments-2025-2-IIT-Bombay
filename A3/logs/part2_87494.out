@@ -1,0 +1,19 @@
+==============================================
+Running Part 2: Attention-Based Retrieval
+Job ID: 87494
+Model dir: /home/cccp/25m2125/VAMSI/CS728/CS-728-Assignments-2025-2-IIT-Bombay/A3/models/Llama-3.2-1B-local
+Start time: Sun Apr  5 17:01:39 IST 2026
+==============================================
+---- debug print start ----
+seed: 64, model: /home/cccp/25m2125/VAMSI/CS728/CS-728-Assignments-2025-2-IIT-Bombay/A3/models/Llama-3.2-1B-local
+model.config._attn_implementation:  eager
+
+============================================================
+PART 2 RESULTS - Attention-Based Retrieval
+============================================================
+Recall@1: 0.0122
+Recall@5: 0.2486
+Total queries: 5000
+Results saved to results_part2.json
+Plot saved to plot2/gold_attention_plot.png
+Part 2 completed at: Sun Apr  5 17:50:31 IST 2026

@@ -1,0 +1,42 @@
+==============================================
+Running BONUS: Different head counts
+Job ID: 87534
+Start time: Sun Apr  5 18:23:48 IST 2026
+==============================================
+=== Testing with 10 heads ===
+
+[Phase 1] Selecting retrieval heads...
+Selecting heads using 200 training queries...
+
+Selected 10 heads
+Selected 10 heads
+[(6, 11), (10, 9), (10, 1), (8, 19), (5, 11), (4, 16), (6, 8), (7, 12), (6, 9), (2, 20)]
+
+[Phase 2] Evaluating on test set...
+
+============================================================
+PART 3 RESULTS - Retrieval Heads
+============================================================
+Max heads: 10
+Recall@1: 0.3438
+Recall@5: 0.6506
+Results saved to results_part3_heads10.json
+=== Testing with 30 heads ===
+
+[Phase 1] Selecting retrieval heads...
+Selecting heads using 200 training queries...
+
+Selected 30 heads
+Selected 30 heads
+[(6, 11), (10, 9), (10, 1), (8, 19), (5, 11), (4, 16), (6, 8), (7, 12), (2, 20), (6, 9), (10, 23), (5, 10), (12, 13), (8, 13), (8, 20), (5, 9), (10, 11), (8, 17), (10, 13), (13, 20), (10, 26), (5, 5), (11, 22), (12, 2), (11, 27), (10, 15), (11, 25), (8, 24), (5, 8), (11, 20)]
+
+[Phase 2] Evaluating on test set...
+
+============================================================
+PART 3 RESULTS - Retrieval Heads
+============================================================
+Max heads: 30
+Recall@1: 0.2162
+Recall@5: 0.5706
+Results saved to results_part3_heads30.json
+BONUS completed at: Sun Apr  5 19:56:55 IST 2026

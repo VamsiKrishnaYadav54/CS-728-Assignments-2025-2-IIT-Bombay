@@ -14,36 +14,40 @@ build/
 dist/
 *.egg-info/
 
-# Data files
-data/
-datasets/
-*.csv
-*.tsv
-*.json
-*.jsonl
-*.parquet
-*.zip
-*.tar.gz
+# # Data files
+# data/
+# datasets/
+# *.csv
+# *.tsv
+# *.json
+# *.jsonl
+# *.parquet
+# *.zip
+# *.tar.gz
 
 # Models
 models/
 checkpoints/
+*.safetensors
 *.pt
 *.pth
 *.bin
 *.ckpt
 *.h5
 
-# Logs and outputs
-logs/
-*.log
-outputs/
-results/
+original/
+
+# # Logs and outputs
+# logs/
+# *.log
+# outputs/
+# results/
 
 # Temp files
 *.tmp
 *.swp
 .DS_Store
+Thumbs.db
 
 # IDEs
 .vscode/

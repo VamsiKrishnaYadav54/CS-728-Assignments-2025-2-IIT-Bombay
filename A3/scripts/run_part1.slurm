@@ -7,47 +7,34 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
 #SBATCH --time=02:00:00
+#SBATCH --qos=a40
 #SBATCH --output=logs/part1_%j.out
 #SBATCH --error=logs/part1_%j.err
 
-# ============================================================================
-# Part 1: Classical Retrieval (BM25, MiniLM, UAE)
-# Estimated time: ~30-60 minutes
-# ============================================================================
+# Your project directory
+SCRIPT_DIR="/home/cccp/25m2125/VAMSI/CS728/CS-728-Assignments-2025-2-IIT-Bombay/A3"
 
-# Get the directory where this script is located
-SCRIPT_DIR="/home/$(whoami)/CS728_PA3"
-
-# Create log directory
 mkdir -p ${SCRIPT_DIR}/logs
-mkdir -p ${SCRIPT_DIR}/results
-
-# Change to project directory
 cd ${SCRIPT_DIR}
 
-# Load modules (adjust based on your cluster's module system)
-# module load python/3.10
-# module load cuda/11.8
+# Activate conda
+source /lustre-flash/apps/spack/share/spack/setup-env.sh
+source ~/miniconda3/bin/activate CS728
 
-# Activate conda environment (if using conda)
-# source activate pa3_env
-# OR use system Python with pip packages
-
-# Set cache directory for HuggingFace (models should be pre-downloaded)
-export HF_HOME="${HOME}/.cache/huggingface"
-export TRANSFORMERS_CACHE="${HF_HOME}/hub"
-export TRANSFORMERS_OFFLINE=1  # Prevent download attempts
+# Use models from project directory
+export HF_HOME="${SCRIPT_DIR}/models/Llama-3.2-1B-local"
+export TRANSFORMERS_CACHE="${SCRIPT_DIR}/models/Llama-3.2-1B-local"
+export SENTENCE_TRANSFORMERS_HOME="${SCRIPT_DIR}/models/sentence_transformers"
+export TRANSFORMERS_OFFLINE=1
+export HF_DATASETS_OFFLINE=1
 
 echo "=============================================="
 echo "Running Part 1: Classical Retrieval"
 echo "Job ID: ${SLURM_JOB_ID}"
-echo "Node: ${SLURMD_NODENAME}"
+echo "Model dir: ${HF_HOME}"
 echo "Start time: $(date)"
 echo "=============================================="
 
-# Run Part 1
-python part1_retrieval.py
+python run1.py
 
-echo "=============================================="
 echo "Part 1 completed at: $(date)"
-echo "=============================================="
