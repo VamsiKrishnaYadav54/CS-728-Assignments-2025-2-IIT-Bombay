@@ -44,5 +44,3 @@ python run3.py --model /home/cccp/25m2125/VAMSI/CS728/CS-728-Assignments-2025-2-
 
 echo "BONUS completed at: $(date)"
 
-
-Testing
