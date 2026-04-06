@@ -43,3 +43,5 @@ echo "=== Testing with 30 heads ==="
 python run3.py --model /home/cccp/25m2125/VAMSI/CS728/CS-728-Assignments-2025-2-IIT-Bombay/A3/models/Llama-3.2-1B-local --seed 64 --max_heads 30 --train_samples 200
 
 echo "BONUS completed at: $(date)"
+
+
